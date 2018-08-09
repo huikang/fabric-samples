@@ -64,9 +64,6 @@ joinChannel () {
 	done
 }
 
-function pause(){
-   read -p "$*"
-}
 
 ## Create channel
 echo "Creating channel..."
@@ -93,63 +90,63 @@ echo "Instantiating chaincode on peer0.org2..."
 #instantiateChaincode 0 2
 instantiateChaincodeNew '{"Args":["init","a","150","b","0","c","0","d","0"]}' 0 2
 
-#pause 'Press [Enter] key to continue...'
+# #pause 'Press [Enter] key to continue...'
 
-# # Query chaincode on peer0.org1
-# echo "Querying chaincode on peer0.org1..."
-# chaincodeQuery 0 1 100
+# # # Query chaincode on peer0.org1
+# # echo "Querying chaincode on peer0.org1..."
+# # chaincodeQuery 0 1 100
 
-sleep 10
-# Invoke chaincode on peer0.org1 and peer0.org2
-echo "Sending invoke transaction on peer0.org1 peer0.org2..."
-#chaincodeInvoke 0 1 0 2
-chaincodeInvokeNew '{"Args":["invoke","a","-100","50","b","100"]}' 0 1 0 2
-
-sleep 5
-# echo "Generating random numbers for the next transaction..."
-# chaincodeGenerateR 0 1
-
-#pause 'Press [Enter] key to continue...'
-sleep 10
-# Invoke chaincode on peer0.org1 and peer0.org2
-#Testing Proof-of-Balance
-echo "Sending invoke transaction on peer0.org1 peer0.org2..."
-#chaincodeInvoke 0 1 0 2
-chaincodeInvokeNew '{"Args":["invoke","a","-50","0","b","40"]}' 0 1 0 2
-
-#pause 'Press [Enter] key to continue...'
-sleep 10
-# Invoke chaincode on peer0.org1 and peer0.org2
-#Testing Proof-of-Assets
-echo "Sending invoke transaction on peer0.org1 peer0.org2..."
-#chaincodeInvoke 0 1 0 2
-chaincodeInvokeNew '{"Args":["invoke","a","-100","-50","b","100"]}' 0 1 0 2
-
-# ## Install chaincode on peer1.org2
-# echo "Installing chaincode on peer1.org2..."
-# installChaincode 1 2
-
-# # Query on chaincode on peer1.org2, check if the result is 90
-# echo "Querying chaincode on peer1.org2..."
-# chaincodeQuery 1 2 90
-
+# sleep 10
 # # Invoke chaincode on peer0.org1 and peer0.org2
 # echo "Sending invoke transaction on peer0.org1 peer0.org2..."
-# chaincodeInvoke2 0 1 0 2
+# #chaincodeInvoke 0 1 0 2
+# chaincodeInvokeNew '{"Args":["invoke","a","-100","50","b","100"]}' 0 1 0 2
 
-# echo "Querying chaincode on peer1.org2..."
-# chaincodeQuery 1 2 95
+# sleep 5
+# # echo "Generating random numbers for the next transaction..."
+# # chaincodeGenerateR 0 1
 
-echo
-echo "========= All GOOD, BYFN execution completed =========== "
-echo
+# #pause 'Press [Enter] key to continue...'
+# sleep 10
+# # Invoke chaincode on peer0.org1 and peer0.org2
+# #Testing Proof-of-Balance
+# echo "Sending invoke transaction on peer0.org1 peer0.org2..."
+# #chaincodeInvoke 0 1 0 2
+# chaincodeInvokeNew '{"Args":["invoke","a","-50","0","b","40"]}' 0 1 0 2
 
-echo
-echo " _____   _   _   ____   "
-echo "| ____| | \ | | |  _ \  "
-echo "|  _|   |  \| | | | | | "
-echo "| |___  | |\  | | |_| | "
-echo "|_____| |_| \_| |____/  "
-echo
+# #pause 'Press [Enter] key to continue...'
+# sleep 10
+# # Invoke chaincode on peer0.org1 and peer0.org2
+# #Testing Proof-of-Assets
+# echo "Sending invoke transaction on peer0.org1 peer0.org2..."
+# #chaincodeInvoke 0 1 0 2
+# chaincodeInvokeNew '{"Args":["invoke","a","-100","-50","b","100"]}' 0 1 0 2
+
+# # ## Install chaincode on peer1.org2
+# # echo "Installing chaincode on peer1.org2..."
+# # installChaincode 1 2
+
+# # # Query on chaincode on peer1.org2, check if the result is 90
+# # echo "Querying chaincode on peer1.org2..."
+# # chaincodeQuery 1 2 90
+
+# # # Invoke chaincode on peer0.org1 and peer0.org2
+# # echo "Sending invoke transaction on peer0.org1 peer0.org2..."
+# # chaincodeInvoke2 0 1 0 2
+
+# # echo "Querying chaincode on peer1.org2..."
+# # chaincodeQuery 1 2 95
+
+# echo
+# echo "========= All GOOD, BYFN execution completed =========== "
+# echo
+
+# echo
+# echo " _____   _   _   ____   "
+# echo "| ____| | \ | | |  _ \  "
+# echo "|  _|   |  \| | | | | | "
+# echo "| |___  | |\  | | |_| | "
+# echo "|_____| |_| \_| |____/  "
+# echo
 
 exit 0

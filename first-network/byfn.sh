@@ -146,6 +146,10 @@ function checkPrereqs() {
   done
 }
 
+function pause(){
+   read -p "$*"
+}
+
 # Generate the needed certificates, the genesis block and start the network.
 function networkUp() {
   checkPrereqs
@@ -165,7 +169,14 @@ function networkUp() {
     exit 1
   fi
   # now run the end to end script
-  docker exec cli scripts/script.sh $CHANNEL_NAME $CLI_DELAY $LANGUAGE $CLI_TIMEOUT $VERBOSE
+  # docker exec cli scripts/script.sh $CHANNEL_NAME $CLI_DELAY $LANGUAGE $CLI_TIMEOUT $VERBOSE
+  docker exec cli scripts/scriptInit.sh $CHANNEL_NAME $CLI_DELAY $LANGUAGE $CLI_TIMEOUT $VERBOSE
+  pause 'Press [Enter] key to continue...'
+  docker exec cli scripts/scriptInvoke.sh $CHANNEL_NAME $CLI_DELAY $LANGUAGE $CLI_TIMEOUT $VERBOSE
+  pause 'Press [Enter] key to continue...'
+  docker exec cli scripts/scriptInvoke2.sh $CHANNEL_NAME $CLI_DELAY $LANGUAGE $CLI_TIMEOUT $VERBOSE
+  pause 'Press [Enter] key to continue...'
+  docker exec cli scripts/scriptInvoke3.sh $CHANNEL_NAME $CLI_DELAY $LANGUAGE $CLI_TIMEOUT $VERBOSE
   if [ $? -ne 0 ]; then
     echo "ERROR !!!! Test failed"
     exit 1

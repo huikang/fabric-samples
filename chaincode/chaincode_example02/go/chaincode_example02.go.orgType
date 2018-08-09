@@ -1,0 +1,478 @@
+/*
+Copyright IBM Corp. 2016 All Rights Reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+		 http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package main
+
+//WARNING - this chaincode's ID is hard-coded in chaincode_example04 to illustrate one way of
+//calling chaincode from a chaincode. If this example is modified, chaincode_example04.go has
+//to be modified as well with the new ID of chaincode_example02.
+//chaincode_example05 show's how chaincode ID can be passed in as a parameter instead of
+//hard-coding.
+
+import (
+	"fmt"
+	"strconv"
+	"math/big"
+	"crypto/rand"
+	"encoding/json"
+
+	"github.com/hyperledger/fabric/core/chaincode/shim"
+	pb "github.com/hyperledger/fabric/protos/peer"
+)
+
+// SimpleChaincode example simple Chaincode implementation
+type SimpleChaincode struct {
+}
+
+
+type pubkey struct {
+	Name       string 					`json:"name"`    //the fieldtags are needed to keep case from bouncing around
+	PubKey     ECPoint   				`json:"publickey"`
+}
+
+type pubkeys struct {
+	ObjectType string 					`json:"docType"` //docType is used to distinguish the various types of objects in state database
+	Object     []pubkey          `json:"keys"`
+}
+
+type randomNum struct {
+	Name       string 					`json:"name"`    //the fieldtags are needed to keep case from bouncing around
+	RandNum    *big.Int   			`json:"randomnumber"`
+}
+
+type randomNums struct {
+	ObjectType string 					`json:"docType"` //docType is used to distinguish the various types of objects in state database
+	Object     []randomNum      `json:"rnumbers"`
+}
+
+type zkelement struct {
+	Name       string 					`json:"name"`    //the fieldtags are needed to keep case from bouncing around
+	ZKElement  pb.ZKElement 		`json:"zkelement"`
+}
+
+type zkrow struct {
+	ObjectType string 					`json:"docType"` //docType is used to distinguish the various types of objects in state database
+	Object     []zkelement      `json:"elements"`
+}
+
+
+func (t *SimpleChaincode) Init(stub shim.ChaincodeStubInterface) pb.Response {
+	fmt.Println("========chaincode_example Init=========")
+
+	_, args := stub.GetFunctionAndParameters()
+	var A, B, C, D string    // Entities
+	var Aval, Bval, Cval, Dval int // Asset holdings
+	var err error
+
+	if len(args) != 8 {
+		return shim.Error("Incorrect number of arguments. Expecting 8")
+	}
+
+	// Initialize the chaincode
+	A = args[0]
+	Aval, err = strconv.Atoi(args[1])
+	if err != nil {
+		return shim.Error("Expecting integer value for asset holding")
+	}
+	B = args[2]
+	Bval, err = strconv.Atoi(args[3])
+	if err != nil {
+		return shim.Error("Expecting integer value for asset holding")
+	}
+	C = args[4]
+	Cval, err = strconv.Atoi(args[5])
+	if err != nil {
+		return shim.Error("Expecting integer value for asset holding")
+	}
+	D = args[6]
+	Dval, err = strconv.Atoi(args[7])
+	if err != nil {
+		return shim.Error("Expecting integer value for asset holding")
+	}
+	bankname := []string{A, B, C, D,}
+	//fmt.Printf("Aval = %d, Bval = %d, Cval = %d, Dval = %d\n", Aval, Bval, Cval, Dval)
+	fmt.Println("0)\tBefore tx, each bank's asset: Aval = ", Aval, ", Bval = ", Bval, ", Cval = ", Cval, ", Dval = ", Dval)
+
+	fmt.Println("1)\tInitialize Elliptic Curve parameters...")
+	dimension := 64//just need to guarantee that they all use 64
+	EC := pb.NewECPrimeGroupKey(dimension)
+	fmt.Println("2)\tAssigning private keys...")
+	banknum := 4
+	SK := make([]*big.Int, banknum)//row
+	for j := range SK {
+		r, err := rand.Int(rand.Reader, EC.N)
+		if err != nil {
+			return shim.Error(err.Error())
+		}
+		SK[j] = r
+	}
+	fmt.Println("SK: ", SK)
+	fmt.Println("3)\tComputing public keys...")
+	PK := make([]pb.ECPoint, banknum)
+	for j := range PK {
+		pkey := pb.PublicKeyPC(SK[j])
+		PK[j] = pkey
+	}
+	fmt.Println("PK: ", PK)
+	fmt.Println("4)\tWriting Public keys into the ledger...")
+
+	//pubkeys := &pubkeys{}
+	var pubkeys pubkeys
+  pubkeys.ObjectType = "PubKey"
+	pubkeys.Object = make([]pubkey, 0)
+	// ==== Create EC object and marshal to JSON ====
+	for j := range PK {
+		//objectType := "PubKey"
+		pubkey := pubkey{bankname[j], PK[j]}
+
+		//==========testing==========
+		pJSONasBytes, err := json.Marshal(pubkey)
+		if err != nil {
+			return shim.Error(err.Error())
+		}
+		fmt.Println("pJSONasBytes = ", pJSONasBytes)
+		err = stub.PutState("PubKey"+strconv.Itoa(j), pJSONasBytes)
+		if err != nil {
+			return shim.Error(err.Error())
+		}
+		//==========testing==========
+
+		//pkJSONasBytes, err := json.Marshal(pubkey)
+		//if err != nil {
+		//	return shim.Error(err.Error())
+		//}
+		pubkeys.Object = append(pubkeys.Object, pubkey)
+	}
+	pkJSONasBytes, err := json.Marshal(pubkeys)
+	if err != nil {
+		return shim.Error(err.Error())
+	}
+	// === Save pubkey to state ===
+	fmt.Println("pkJSONasBytes = ", pkJSONasBytes)
+	err = stub.PutState("PubKey", pkJSONasBytes)
+	if err != nil {
+		return shim.Error(err.Error())
+	}
+
+	fmt.Println("5)\tGenerating random numbers...")
+	r := pb.GetR(banknum) //generate r for each tx
+	var randomNums randomNums
+	randomNums.ObjectType = "RandNum"
+	randomNums.Object = make([]randomNum, 0)
+	for j := range r {
+		randomNum := randomNum{bankname[j], *r[j]}
+		randomNums.Object = append(randomNums.Object, randomNum)
+	}
+	rJSONasBytes, err := json.Marshal(randomNums)
+	if err != nil {
+		return shim.Error(err.Error())
+	}
+	// === Save random number to state ===
+	err = stub.PutState("TX0RandNum", rJSONasBytes)
+	if err != nil {
+		return shim.Error(err.Error())
+	}
+
+
+	fmt.Println("6)\tComputing Pedersen commiments and token...")
+	value := []*big.Int{big.NewInt(int64(Aval)),big.NewInt(int64(Bval)),big.NewInt(int64(Cval)),big.NewInt(int64(Dval)),}
+	var zkrow zkrow
+  zkrow.ObjectType = "ZKrow"
+	zkrow.Object = make([]zkelement, 0)
+
+	for i := 0; i < banknum; i++ {
+		Pcommitment, Token := pb.PCommitToken(value[i],r[i],PK[i])
+		fmt.Println("Pcommit, Token are ", Pcommitment, Token)
+		rpresult := pb.RangeProof{}
+		ZKElement := pb.ZKElement{Pcommitment, Token, rpresult}
+		zkelement := zkelement{bankname[i], ZKElement}
+		zkrow.Object = append(zkrow.Object, zkelement)
+	}
+
+	// Write the state to the ledger
+	fmt.Println("7)\tWriting Pcommit & Token into the ledger...")
+	zkJSONasBytes, err := json.Marshal(zkrow)
+	if err != nil {
+		return shim.Error(err.Error())
+	}
+	// === Save pubkey to state ===
+	err = stub.PutState("TX0", zkJSONasBytes)
+	if err != nil {
+		return shim.Error(err.Error())
+	}
+
+	//fmt.Println("Writing TX ID into the ledger...")
+	err = stub.PutState("TXID", []byte(strconv.Itoa(0)))
+	if err != nil {
+		return shim.Error(err.Error())
+	}
+
+	// err = stub.PutState(A, []byte(strconv.Itoa(Aval)))
+	// if err != nil {
+	// 	return shim.Error(err.Error())
+	// }
+	//
+	// err = stub.PutState(B, []byte(strconv.Itoa(Bval)))
+	// if err != nil {
+	// 	return shim.Error(err.Error())
+	// }
+	//
+	// err = stub.PutState(C, []byte(strconv.Itoa(Cval)))
+	// if err != nil {
+	// 	return shim.Error(err.Error())
+	// }
+	//
+	// err = stub.PutState(D, []byte(strconv.Itoa(Dval)))
+	// if err != nil {
+	// 	return shim.Error(err.Error())
+	// }
+
+	return shim.Success(nil)
+}
+
+func (t *SimpleChaincode) Invoke(stub shim.ChaincodeStubInterface) pb.Response {
+	fmt.Println("ex02 Invoke")
+	function, args := stub.GetFunctionAndParameters()
+	if function == "invoke" {
+		// Make payment of X units from A to B
+		return t.invoke(stub, args)
+	} else if function == "delete" {
+		// Deletes an entity from its state
+		return t.delete(stub, args)
+	} else if function == "query" {
+		// the old "Query" is now implemtned in invoke
+		return t.query(stub, args)
+	}
+
+	return shim.Error("Invalid invoke function name. Expecting \"invoke\" \"delete\" \"query\"")
+}
+
+// Transaction makes payment of X units from A to B
+func (t *SimpleChaincode) invoke(stub shim.ChaincodeStubInterface, args []string) pb.Response {
+	var A, B string    // Entities
+	//var Aval, Bval int // Asset holdings
+	var Aval, Bval int          // Transaction value
+	var err error
+	//var PKA, PKB pb.ECPoint
+
+	banknum := 4
+
+	if len(args) != 4 {
+		return shim.Error("Incorrect number of arguments. Expecting 4")
+	}
+
+	A = args[0]
+	B = args[2]
+	// Perform the execution
+	Aval, err = strconv.Atoi(args[1])
+	if err != nil {
+		return shim.Error("Invalid transaction amount, expecting a integer value")
+	}
+	Bval, err = strconv.Atoi(args[3])
+	if err != nil {
+		return shim.Error("Invalid transaction amount, expecting a integer value")
+	}
+
+	//fmt.Println("1)\tInitialize Elliptic Curve parameters...")
+	//dimension := 64//just need to guarantee that they all use 64
+	//EC := pb.NewECPrimeGroupKey(dimension)
+
+
+	fmt.Println("1)\tReading Public keys from the ledger...")
+	//pubkeys := &pubkeys{}
+	// var pubkeys pubkeys
+	// pubkeys.ObjectType = "PubKey"
+	// pubkeys.Object = make([]pubkey, 0)
+	// // ==== Create EC object and marshal to JSON ====
+	// for j := range PK {
+	// 	pubkey := pubkey{bankname[j], PK[j]}
+	// 	pubkeys.Object = append(pubkeys.Object, pubkey)
+	// }
+	// pkJSONasBytes, err := json.Marshal(pubkeys)
+	// if err != nil {
+	// 	return shim.Error(err.Error())
+	// }
+	// // === Save pubkey to state ===
+	// err = stub.PutState("PubKey", pkJSONasBytes)
+	// if err != nil {
+	// 	return shim.Error(err.Error())
+	// }
+	pkJSONasBytes, err := stub.GetState("PubKey")
+	if err != nil {
+		return shim.Error("Failed to get marble:" + err.Error())
+	} else if pkJSONasBytes == nil {
+		return shim.Error("PK does not exist!")
+	}
+
+	//==========testing==========
+	for j := 0; j < 4; j++ {
+		pJSONasBytes, err := stub.GetState("PubKey"+strconv.Itoa(j))
+		if err != nil {
+			return shim.Error("Failed to get marble:" + err.Error())
+		} else if pkJSONasBytes == nil {
+			return shim.Error("PK does not exist!")
+		}
+		fmt.Println("pJSONasBytes = ", pJSONasBytes)
+	}
+	//==========testing==========
+
+	var pubkeys pubkeys
+	// marbleToTransfer := marble{}
+	fmt.Println("pkJSONasBytes = ", pkJSONasBytes)
+	err = json.Unmarshal(pkJSONasBytes, &pubkeys) //unmarshal it aka JSON.parse()
+	if err != nil {
+		return shim.Error(err.Error())
+	}
+	fmt.Println("PK: ", pubkeys.Object)
+
+	//PK := make([]pb.ECPoint, banknum)
+	PK := make([]pb.ECPoint, banknum)
+	bankname := make([]string, banknum)
+	value := make([]*big.Int, banknum)
+
+	for i := 0; i < len(pubkeys.Object); i++ {
+		PK[i] = pubkeys.Object[i].PubKey
+		bankname[i] = pubkeys.Object[i].Name
+
+
+		if(pubkeys.Object[i].Name == A) {
+			//PKA = pubkeys.Object[i].PubKey
+			value[i] = big.NewInt(int64(Aval))
+		} else if (pubkeys.Object[i].Name == B) {
+			//PKB = pubkeys.Object[i].PubKey
+			value[i] = big.NewInt(int64(Bval))
+		} else {
+			value[i] = big.NewInt(0)
+		}
+	}
+	// if PKA == nil || PKB == nil {
+	// 	return shim.Error("PK does not exist!")
+	// }
+
+	//fmt.Println("Reading TX ID from the ledger...")
+	TXbytes, err := stub.GetState("TXID")
+	if err != nil || TXbytes == nil {
+		return shim.Error("Failed to get state")
+	}
+	TXval, _ := strconv.Atoi(string(TXbytes))
+	TXval++
+
+	fmt.Println("2)\tGenerating random numbers...")
+	r := pb.GetR(banknum) //generate r for each tx
+	var randomNums randomNums
+	randomNums.ObjectType = "RandNum"
+	randomNums.Object = make([]randomNum, 0)
+	for j := range r {
+		randomNum := randomNum{bankname[j], *r[j]}
+		randomNums.Object = append(randomNums.Object, randomNum)
+	}
+	rJSONasBytes, err := json.Marshal(randomNums)
+	if err != nil {
+		return shim.Error(err.Error())
+	}
+	// === Save random number to state ===
+	randName := "TX"+strconv.Itoa(TXval)+"RandNum"
+	err = stub.PutState(randName, rJSONasBytes)
+	if err != nil {
+		return shim.Error(err.Error())
+	}
+
+	fmt.Println("3)\tComputing Pedersen commiments and token...")
+	var zkrow zkrow
+  zkrow.ObjectType = "ZKrow"
+	zkrow.Object = make([]zkelement, 0)
+	for i := 0; i < banknum; i++ {
+		Pcommitment, Token := pb.PCommitToken(value[i],r[i],PK[i])
+		fmt.Println("Pcommit, Token are ", Pcommitment, Token)
+		rpresult := pb.RangeProof{}
+		ZKElement := pb.ZKElement{Pcommitment, Token, rpresult}
+		zkelement := zkelement{bankname[i], ZKElement}
+		zkrow.Object = append(zkrow.Object, zkelement)
+	}
+
+	// Write the state to the ledger
+	fmt.Println("4)\tWriting Pcommit & Token into the ledger...")
+	zkJSONasBytes, err := json.Marshal(zkrow)
+	if err != nil {
+		return shim.Error(err.Error())
+	}
+	// === Save pubkey to state ===
+	txName := "TX"+strconv.Itoa(TXval)
+	err = stub.PutState(txName, zkJSONasBytes)
+	if err != nil {
+		return shim.Error(err.Error())
+	}
+
+	//fmt.Println("Writing TX ID into the ledger...")
+	err = stub.PutState("TXID", []byte(strconv.Itoa(TXval)))
+	if err != nil {
+		return shim.Error(err.Error())
+	}
+
+	return shim.Success(nil)
+}
+
+// Deletes an entity from state
+func (t *SimpleChaincode) delete(stub shim.ChaincodeStubInterface, args []string) pb.Response {
+	if len(args) != 1 {
+		return shim.Error("Incorrect number of arguments. Expecting 1")
+	}
+
+	A := args[0]
+
+	// Delete the key from the state in ledger
+	err := stub.DelState(A)
+	if err != nil {
+		return shim.Error("Failed to delete state")
+	}
+
+	return shim.Success(nil)
+}
+
+// query callback representing the query of a chaincode
+func (t *SimpleChaincode) query(stub shim.ChaincodeStubInterface, args []string) pb.Response {
+	var A string // Entities
+	var err error
+
+	if len(args) != 1 {
+		return shim.Error("Incorrect number of arguments. Expecting name of the person to query")
+	}
+
+	A = args[0]
+
+	// Get the state from the ledger
+	Avalbytes, err := stub.GetState(A)
+	if err != nil {
+		jsonResp := "{\"Error\":\"Failed to get state for " + A + "\"}"
+		return shim.Error(jsonResp)
+	}
+
+	if Avalbytes == nil {
+		jsonResp := "{\"Error\":\"Nil amount for " + A + "\"}"
+		return shim.Error(jsonResp)
+	}
+
+	jsonResp := "{\"Name\":\"" + A + "\",\"Amount\":\"" + string(Avalbytes) + "\"}"
+	fmt.Printf("Query Response:%s\n", jsonResp)
+	return shim.Success(Avalbytes)
+}
+
+func main() {
+	err := shim.Start(new(SimpleChaincode))
+	if err != nil {
+		fmt.Printf("Error starting Simple chaincode: %s", err)
+	}
+}

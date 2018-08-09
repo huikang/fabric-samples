@@ -139,12 +139,39 @@ instantiateChaincode() {
   # the "-o" option
   if [ -z "$CORE_PEER_TLS_ENABLED" -o "$CORE_PEER_TLS_ENABLED" = "false" ]; then
     set -x
-    peer chaincode instantiate -o orderer.example.com:7050 -C $CHANNEL_NAME -n mycc -l ${LANGUAGE} -v ${VERSION} -c '{"Args":["init","a","100","b","200"]}' -P "AND ('Org1MSP.peer','Org2MSP.peer')" >&log.txt
+    peer chaincode instantiate -o orderer.example.com:7050 -C $CHANNEL_NAME -n mycc -l ${LANGUAGE} -v ${VERSION} -c '{"Args":["init","a","150","b","0","c","0","d","0"]}' -P "AND ('Org1MSP.peer','Org2MSP.peer')" >&log.txt
     res=$?
     set +x
   else
     set -x
-    peer chaincode instantiate -o orderer.example.com:7050 --tls $CORE_PEER_TLS_ENABLED --cafile $ORDERER_CA -C $CHANNEL_NAME -n mycc -l ${LANGUAGE} -v 1.0 -c '{"Args":["init","a","100","b","200"]}' -P "AND ('Org1MSP.peer','Org2MSP.peer')" >&log.txt
+    peer chaincode instantiate -o orderer.example.com:7050 --tls $CORE_PEER_TLS_ENABLED --cafile $ORDERER_CA -C $CHANNEL_NAME -n mycc -l ${LANGUAGE} -v 1.0 -c '{"Args":["init","a","150","b","0","c","0","d","0"]}' -P "AND ('Org1MSP.peer','Org2MSP.peer')" >&log.txt
+    res=$?
+    set +x
+  fi
+  cat log.txt
+  verifyResult $res "Chaincode instantiation on peer${PEER}.org${ORG} on channel '$CHANNEL_NAME' failed"
+  echo "===================== Chaincode is instantiated on peer${PEER}.org${ORG} on channel '$CHANNEL_NAME' ===================== "
+  echo
+}
+
+instantiateChaincodeNew() {
+  para=$1
+  PEER=$2
+  ORG=$3
+  setGlobals $PEER $ORG
+  VERSION=${3:-1.0}
+
+  # while 'peer chaincode' command can get the orderer endpoint from the peer
+  # (if join was successful), let's supply it directly as we know it using
+  # the "-o" option
+  if [ -z "$CORE_PEER_TLS_ENABLED" -o "$CORE_PEER_TLS_ENABLED" = "false" ]; then
+    set -x
+    peer chaincode instantiate -o orderer.example.com:7050 -C $CHANNEL_NAME -n mycc -l ${LANGUAGE} -v ${VERSION} -c "${para}" -P "AND ('Org1MSP.peer','Org2MSP.peer')" >&log.txt
+    res=$?
+    set +x
+  else
+    set -x
+    peer chaincode instantiate -o orderer.example.com:7050 --tls $CORE_PEER_TLS_ENABLED --cafile $ORDERER_CA -C $CHANNEL_NAME -n mycc -l ${LANGUAGE} -v 1.0 -c "${para}" -P "AND ('Org1MSP.peer','Org2MSP.peer')" >&log.txt
     res=$?
     set +x
   fi
@@ -160,7 +187,7 @@ upgradeChaincode() {
   setGlobals $PEER $ORG
 
   set -x
-  peer chaincode upgrade -o orderer.example.com:7050 --tls $CORE_PEER_TLS_ENABLED --cafile $ORDERER_CA -C $CHANNEL_NAME -n mycc -v 2.0 -c '{"Args":["init","a","90","b","210"]}' -P "AND ('Org1MSP.peer','Org2MSP.peer','Org3MSP.peer')"
+  peer chaincode upgrade -o orderer.example.com:7050 --tls $CORE_PEER_TLS_ENABLED --cafile $ORDERER_CA -C $CHANNEL_NAME -n mycc -v 2.0 -c '{"Args":["init","a","90","b","210","c","0","d","50"]}' -P "AND ('Org1MSP.peer','Org2MSP.peer','Org3MSP.peer')"
   res=$?
   set +x
   cat log.txt
@@ -292,6 +319,52 @@ parsePeerConnectionParameters() {
   PEERS="$(echo -e "$PEERS" | sed -e 's/^[[:space:]]*//')"
 }
 
+parseParameters() {
+  para=$1
+  shift
+  PEER_CONN_PARMS=""
+  PEERS=""
+  while [ "$#" -gt 0 ]; do
+    PEER="peer$1.org$2"
+    PEERS="$PEERS $PEER"
+    PEER_CONN_PARMS="$PEER_CONN_PARMS --peerAddresses $PEER.example.com:7051"
+    if [ -z "$CORE_PEER_TLS_ENABLED" -o "$CORE_PEER_TLS_ENABLED" = "true" ]; then
+      TLSINFO=$(eval echo "--tlsRootCertFiles \$PEER$1_ORG$2_CA")
+      PEER_CONN_PARMS="$PEER_CONN_PARMS $TLSINFO"
+    fi
+    # shift by two to get the next pair of peer/org parameters
+    shift
+    shift
+  done
+  # remove leading space for output
+  PEERS="$(echo -e "$PEERS" | sed -e 's/^[[:space:]]*//')"
+}
+
+chaincodeInvokeNew() {
+  parseParameters $@
+  res=$?
+  verifyResult $res "Invoke transaction failed on channel '$CHANNEL_NAME' due to uneven number of peer and org parameters "
+
+  # while 'peer chaincode' command can get the orderer endpoint from the
+  # peer (if join was successful), let's supply it directly as we know
+  # it using the "-o" option
+  if [ -z "$CORE_PEER_TLS_ENABLED" -o "$CORE_PEER_TLS_ENABLED" = "false" ]; then
+    set -x
+    peer chaincode invoke -o orderer.example.com:7050 -C $CHANNEL_NAME -n mycc $PEER_CONN_PARMS -c "${para}" >&log.txt
+    res=$?
+    set +x
+  else
+    set -x
+    peer chaincode invoke -o orderer.example.com:7050 --tls $CORE_PEER_TLS_ENABLED --cafile $ORDERER_CA -C $CHANNEL_NAME -n mycc $PEER_CONN_PARMS -c "${para}" >&log.txt
+    res=$?
+    set +x
+  fi
+  cat log.txt
+  verifyResult $res "Invoke execution on $PEERS failed "
+  echo "===================== Invoke transaction successful on $PEERS on channel '$CHANNEL_NAME' ===================== "
+  echo
+}
+
 # chaincodeInvoke <peer> <org> ...
 # Accepts as many peer/org pairs as desired and requests endorsement from each
 chaincodeInvoke() {
@@ -304,12 +377,61 @@ chaincodeInvoke() {
   # it using the "-o" option
   if [ -z "$CORE_PEER_TLS_ENABLED" -o "$CORE_PEER_TLS_ENABLED" = "false" ]; then
     set -x
-    peer chaincode invoke -o orderer.example.com:7050 -C $CHANNEL_NAME -n mycc $PEER_CONN_PARMS -c '{"Args":["invoke","a","b","10"]}' >&log.txt
+    peer chaincode invoke -o orderer.example.com:7050 -C $CHANNEL_NAME -n mycc $PEER_CONN_PARMS -c '{"Args":["invoke","a","-100","b","100"]}' >&log.txt
     res=$?
     set +x
   else
     set -x
-    peer chaincode invoke -o orderer.example.com:7050 --tls $CORE_PEER_TLS_ENABLED --cafile $ORDERER_CA -C $CHANNEL_NAME -n mycc $PEER_CONN_PARMS -c '{"Args":["invoke","a","b","10"]}' >&log.txt
+    peer chaincode invoke -o orderer.example.com:7050 --tls $CORE_PEER_TLS_ENABLED --cafile $ORDERER_CA -C $CHANNEL_NAME -n mycc $PEER_CONN_PARMS -c '{"Args":["invoke","a","-100","b","100"]}' >&log.txt
+    res=$?
+    set +x
+  fi
+  cat log.txt
+  verifyResult $res "Invoke execution on $PEERS failed "
+  echo "===================== Invoke transaction successful on $PEERS on channel '$CHANNEL_NAME' ===================== "
+  echo
+}
+
+chaincodeGenerateR() {
+  parsePeerConnectionParameters $@
+  res=$?
+  verifyResult $res "Invoke transaction failed on channel '$CHANNEL_NAME' due to uneven number of peer and org parameters "
+  # while 'peer chaincode' command can get the orderer endpoint from the
+  # peer (if join was successful), let's supply it directly as we know
+  # it using the "-o" option
+  if [ -z "$CORE_PEER_TLS_ENABLED" -o "$CORE_PEER_TLS_ENABLED" = "false" ]; then
+    set -x
+    peer chaincode invoke -o orderer.example.com:7050 -C $CHANNEL_NAME -n mycc $PEER_CONN_PARMS -c '{"Args":["generater", "a", "b", "c", "d"]}' >&log.txt
+    res=$?
+    set +x
+  else
+    set -x
+    peer chaincode invoke -o orderer.example.com:7050 --tls $CORE_PEER_TLS_ENABLED --cafile $ORDERER_CA -C $CHANNEL_NAME -n mycc $PEER_CONN_PARMS -c '{"Args":["generater", "a", "b", "c", "d"]}' >&log.txt
+    res=$?
+    set +x
+  fi
+  cat log.txt
+  verifyResult $res "Invoke execution on $PEERS failed "
+  echo "===================== Assignig random numbers successful on $PEERS on channel '$CHANNEL_NAME' ===================== "
+  echo
+}
+
+chaincodeInvoke2() {
+  parsePeerConnectionParameters $@
+  res=$?
+  verifyResult $res "Invoke transaction failed on channel '$CHANNEL_NAME' due to uneven number of peer and org parameters "
+
+  # while 'peer chaincode' command can get the orderer endpoint from the
+  # peer (if join was successful), let's supply it directly as we know
+  # it using the "-o" option
+  if [ -z "$CORE_PEER_TLS_ENABLED" -o "$CORE_PEER_TLS_ENABLED" = "false" ]; then
+    set -x
+    peer chaincode invoke -o orderer.example.com:7050 -C $CHANNEL_NAME -n mycc $PEER_CONN_PARMS -c '{"Args":["invoke","d","a","5"]}' >&log.txt
+    res=$?
+    set +x
+  else
+    set -x
+    peer chaincode invoke -o orderer.example.com:7050 --tls $CORE_PEER_TLS_ENABLED --cafile $ORDERER_CA -C $CHANNEL_NAME -n mycc $PEER_CONN_PARMS -c '{"Args":["invoke","d","a","5"]}' >&log.txt
     res=$?
     set +x
   fi
